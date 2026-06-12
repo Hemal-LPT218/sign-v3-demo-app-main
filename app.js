@@ -25,6 +25,8 @@ const createJwt = async (payload) => {
 
 app.use(express.static("frontend"));
 
+const path = require("node:path");
+
 app.get("/sign", async (req, res) => {
   try {
     const payload = {
@@ -35,9 +37,9 @@ app.get("/sign", async (req, res) => {
       client_id: config.CLIENT_ID,
     };
 
-    const pdf = readFileSync("./dummy.pdf");
+    const pdfBuffer = readFileSync(path.join(process.cwd(), "dummy.pdf"));
 
-    const createSignRequestResponse = await axios.post("/sign-requests", pdf, {
+    const createSignRequestResponse = await axios.post("/sign-requests", pdfBuffer, {
       headers: {
         "Content-Type": "application/octet-stream",
         Authorization: await createJwt(payload),
@@ -88,7 +90,7 @@ app.post("/webhook", async (req, res) => {
 
     const { payload } = await jwtVerify(
       token,
-      createRemoteJWKSet(new URL(config.SIGN_JWKS_URL)),
+      createRemoteJWKSet(new URL(config.SIGN_JWKS_URL))
     );
 
     console.log("Webhook received:", payload);
