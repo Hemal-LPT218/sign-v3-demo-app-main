@@ -92,6 +92,5 @@ app.post("/webhook", async (req, res) => {
   return res.status(200).send("OK");
 });
 
-app.listen(config.PORT, () => {
-  console.log(`App started, go to http://localhost:${config.PORT}`);
-});
+// ✅ ADD THIS LINE AT THE END:
+module.exports = app;
