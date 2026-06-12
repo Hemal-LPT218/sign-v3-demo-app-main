@@ -2,7 +2,8 @@
   "name": "demo-app",
   "version": "0.0.1",
   "description": "This repository provides examples of how you might integrate with Sign V3 as an RP.",
-  "main": "index.js",
+  "type": "module",
+  "main": "app.js",
   "scripts": {
     "start": "node app.js"
   },

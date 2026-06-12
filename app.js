@@ -1,15 +1,18 @@
-const express = require("express");
-const config = require("./config.json");
-const { readFileSync } = require("node:fs");
-const { SignJWT, importJWK, createRemoteJWKSet, jwtVerify } = require("jose");
-const NodeCache = require("node-cache");
-const assert = require("node:assert");
+import express from "express";
+import config from "./config.json" assert { type: "json" };
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { SignJWT, importJWK, createRemoteJWKSet, jwtVerify } from "jose";
+import NodeCache from "node-cache";
+import assert from "node:assert";
+import axiosLib from "axios";
 
-const axios = require("axios").create({ baseURL: config.SIGN_BASE_URL });
+const axios = axiosLib.create({ baseURL: config.SIGN_BASE_URL });
 const cache = new NodeCache({ stdTTL: 5400 });
 const app = express();
 
 app.use(express.json());
+app.use(express.static("frontend"));
 
 const createJwt = async (payload) => {
   return new SignJWT(payload)
@@ -22,10 +25,6 @@ const createJwt = async (payload) => {
     .setExpirationTime("120s")
     .sign(await importJWK(config.CLIENT_PRIVATE_KEY));
 };
-
-app.use(express.static("frontend"));
-
-const path = require("node:path");
 
 app.get("/sign", async (req, res) => {
   try {
@@ -57,25 +56,27 @@ app.get("/sign", async (req, res) => {
 });
 
 app.get("/sign-requests/:request_id", async (req, res) => {
-  const { request_id } = req.params;
+  try {
+    const { request_id } = req.params;
 
-  const exchange_code = await cache.get(`exchange_code::${request_id}`);
-  assert(exchange_code);
+    const exchange_code = cache.get(`exchange_code::${request_id}`);
+    assert(exchange_code);
 
-  const {
-    data: { signed_doc_url },
-  } = await axios.get(`/sign-requests/${request_id}/signed_doc`, {
-    headers: { Authorization: await createJwt({ exchange_code }) },
-  });
+    const {
+      data: { signed_doc_url },
+    } = await axios.get(`/sign-requests/${request_id}/signed_doc`, {
+      headers: { Authorization: await createJwt({ exchange_code }) },
+    });
 
-  const file = await axios.get(signed_doc_url, { responseType: "stream" });
+    const file = await axios.get(signed_doc_url, { responseType: "stream" });
 
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="signed_${request_id}.pdf"`,
-  );
-  res.setHeader("Content-Type", "application/pdf");
-  return file.data.pipe(res);
+    res.setHeader("Content-Disposition", `attachment; filename="signed_${request_id}.pdf"`);
+    res.setHeader("Content-Type", "application/pdf");
+    return file.data.pipe(res);
+  } catch (error) {
+    console.error("DOWNLOAD ERROR:", error);
+    return res.status(500).send("Download failed");
+  }
 });
 
 app.get("/jwks", (req, res) => {
@@ -86,7 +87,7 @@ app.get("/jwks", (req, res) => {
 app.post("/webhook", async (req, res) => {
   try {
     const token = req.body.token;
-    if (!token) return res.status(400).send("Missing token");
+    assert(token);
 
     const { payload } = await jwtVerify(
       token,
@@ -101,5 +102,4 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// ✅ ADD THIS LINE AT THE END:
-module.exports = app;
+export default app;
