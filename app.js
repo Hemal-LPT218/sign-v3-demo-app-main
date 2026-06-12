@@ -26,31 +26,32 @@ const createJwt = async (payload) => {
 app.use(express.static("frontend"));
 
 app.get("/sign", async (req, res) => {
-  const payload = {
-    x: 0.5,
-    y: 0.5,
-    page: 1,
-    doc_name: "dummy.pdf",
-    client_id: config.CLIENT_ID,
-  };
+  try {
+    const payload = {
+      x: 0.5,
+      y: 0.5,
+      page: 1,
+      doc_name: "dummy.pdf",
+      client_id: config.CLIENT_ID,
+    };
 
-  const createSignRequestResponse = await axios
-    .post("/sign-requests", readFileSync("dummy.pdf"), {
+    const pdf = readFileSync("./dummy.pdf");
+
+    const createSignRequestResponse = await axios.post("/sign-requests", pdf, {
       headers: {
         "Content-Type": "application/octet-stream",
         Authorization: await createJwt(payload),
       },
-    })
-    .catch((error) => {
-      console.log(error.response.data);
     });
 
-  const { signing_url, request_id, exchange_code } =
-    createSignRequestResponse.data;
+    const { signing_url, request_id, exchange_code } = createSignRequestResponse.data;
+    cache.set(`exchange_code::${request_id}`, exchange_code);
 
-  cache.set(`exchange_code::${request_id}`, exchange_code);
-
-  return res.redirect(signing_url);
+    return res.redirect(signing_url);
+  } catch (error) {
+    console.error("SIGN ERROR:", error?.response?.data || error);
+    return res.status(500).send("Sign failed");
+  }
 });
 
 app.get("/sign-requests/:request_id", async (req, res) => {
@@ -81,15 +82,21 @@ app.get("/jwks", (req, res) => {
 });
 
 app.post("/webhook", async (req, res) => {
-  const token = req.body.token;
-  assert(token);
+  try {
+    const token = req.body.token;
+    if (!token) return res.status(400).send("Missing token");
 
-  const { payload } = await jwtVerify(
-    token,
-    createRemoteJWKSet(new URL(config.SIGN_JWKS_URL)),
-  );
-  console.log("Webhook received:", payload);
-  return res.status(200).send("OK");
+    const { payload } = await jwtVerify(
+      token,
+      createRemoteJWKSet(new URL(config.SIGN_JWKS_URL)),
+    );
+
+    console.log("Webhook received:", payload);
+    return res.status(200).send("OK");
+  } catch (error) {
+    console.error("WEBHOOK ERROR:", error);
+    return res.status(500).send("Webhook failed");
+  }
 });
 
 // ✅ ADD THIS LINE AT THE END:
